@@ -1,26 +1,23 @@
-from rest_framework import viewsets, mixins
+from rest_framework import viewsets, mixins, permissions
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import Habit
-from .serializers import HabitSerializer
-from .permissions import IsOwnerOrReadOnly
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
+from .serializers import HabitSerializer
+from .pagination import HabitPagination
 
 class HabitViewSet(viewsets.ModelViewSet):
-    queryset = Habit.objects.all()
     serializer_class = HabitSerializer
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    pagination_class = HabitPagination
 
     def get_queryset(self):
-        # owners see their habits (private+public)
         user = self.request.user
-        if self.action == "list":
-            return Habit.objects.filter(owner=user)
-        return Habit.objects.all()
+        if self.action == 'list_public':
+            return Habit.objects.filter(is_public=True)
+        return Habit.objects.filter(user=user)
 
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+        serializer.save(user=self.request.user)
 
     @action(detail=True, methods=["post"])
     def mark_done(self, request, pk=None):

@@ -3,53 +3,52 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from datetime import timedelta
-from django.contrib.auth.models import User
 from django.db import models
+from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 
 class Habit(models.Model):
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="habits")
-    place = models.CharField(max_length=255, blank=True)
-    time_of_day = models.TimeField()  # время выполнения
-    action = models.CharField(max_length=255)
-    is_pleasant = models.BooleanField(default=False)  # признак приятной привычки
-    related_habit = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL,
-                                      related_name="linked_to")
-    periodicity_days = models.PositiveIntegerField(default=1)  # периодичность в днях, по умолчанию 1
-    reward = models.CharField(max_length=255, blank=True)  # текст вознаграждения
-    estimated_seconds = models.PositiveIntegerField(default=120)  # время на выполнение в секундах
-    is_public = models.BooleanField(default=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, default=1)
+    action = models.CharField(max_length=255)  # Действие
+    time = models.TimeField()                  # Время выполнения
+    place = models.CharField(max_length=255)   # Место
+    is_pleasant = models.BooleanField(default=False)  # Признак приятной привычки
+    related_habit = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        limit_choices_to={'is_pleasant': True},  # Только приятные привычки
+        related_name="main_habits"
+    )
+    reward = models.CharField(max_length=255, blank=True, null=True)
+    frequency_days = models.PositiveIntegerField(default=1)  # Периодичность в днях
+    duration_seconds = models.PositiveIntegerField(default=60)  # Время на выполнение
+    is_public = models.BooleanField(default=False)  # Публичная привычка
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    # optional: store last_performed date for scheduling logic
-    last_performed = models.DateField(null=True, blank=True)
-
-    class Meta:
-        ordering = ["-created_at"]
 
     def clean(self):
-        # 1. нельзя одновременно указать reward и related_habit (в полезной привычке)
+        # Валидаторы
+
+        # Приятная привычка не может иметь reward или related_habit
+        if self.is_pleasant:
+            if self.reward or self.related_habit:
+                raise ValidationError("У приятной привычки не может быть вознаграждения или связанной привычки")
+
+        # Одновременно reward и related_habit быть не могут
         if self.reward and self.related_habit:
-            raise ValidationError("Нельзя одновременно указывать вознаграждение и связанную привычку.")
+            raise ValidationError("Можно указать либо вознаграждение, либо связанную привычку, но не оба сразу")
 
-        # 2. estimated_seconds <= 120
-        if self.estimated_seconds > 120:
-            raise ValidationError("Время выполнения не должно превышать 120 секунд.")
+        # Время на выполнение <= 120 секунд
+        if self.duration_seconds > 120:
+            raise ValidationError("Время выполнения не должно превышать 120 секунд")
 
-        # 3. в связанные привычки могут попадать только привычки с is_pleasant=True
-        if self.related_habit and not self.related_habit.is_pleasant:
-            raise ValidationError("Связанная привычка должна быть признаком приятной привычки.")
+        # Периодичность >= 1 день и <= 7 дней
+        if self.frequency_days < 1 or self.frequency_days > 7:
+            raise ValidationError("Нельзя выполнять привычку реже, чем 1 раз в 7 дней")
 
-        # 4. у приятной привычки не может быть reward или related_habit
-        if self.is_pleasant and (self.reward or self.related_habit):
-            raise ValidationError("У приятной привычки не должно быть вознаграждения или связанной привычки.")
-
-        # 5. нельзя выполнять реже, чем раз в 7 дней: periodicity_days <= 7
-        if self.periodicity_days > 7:
-            raise ValidationError("Нельзя устанавливать периодичность более 7 дней.")
-
-        # 6. also: periodicity_days >= 1
-        if self.periodicity_days < 1:
-            raise ValidationError("Периодичность должна быть не менее 1 дня.")
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -68,7 +67,8 @@ class Habit(models.Model):
 
 
 class Profile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
+
     telegram_chat_id = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self):
