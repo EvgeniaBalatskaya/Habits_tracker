@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+*.venv
+*.sqlite3
+
+# Django
+*.log
+*.pot
+*.py[cod]
+*.sqlite3
+*.pyc
+db.sqlite3
+media/
+
+# Virtual environment
+.venv/
+env/
+venv/
+
+# Migrations
+*/migrations/*.py
+!*/migrations/__init__.py
+
+# VS Code
+.vscode/
+
+# JetBrains
+.idea/
+
+# macOS
+.DS_Store
+
+# pytest
+htmlcov/
+.coverage
+
+# Celery beat schedule
+celerybeat-schedule
+
+# Env files
+.env
